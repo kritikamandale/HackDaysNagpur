@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Segmentation Demo (Static)</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-bg">
+    <div class="card glass">
+      <h1 class="title">Offroad Segmentation Demo (Static)</h1>
+      <div class="upload-row">
+        <input id="fileInput" type="file" accept="image/*" />
+        <div class="controls">
+          <button id="runBtn" class="btn">Run Segmentation</button>
+          <button id="downloadBtn" class="btn" disabled>Download Mask</button>
+          <label class="toggle"><input id="overlayToggle" type="checkbox"/> Overlay</label>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <div class="panel">
+          <h3>Original</h3>
+          <canvas id="origCanvas" class="preview-canvas"></canvas>
+        </div>
+        <div class="panel">
+          <h3>Prediction</h3>
+          <canvas id="maskCanvas" class="preview-canvas"></canvas>
+        </div>
+      </div>
+
+      <div class="panel ai-panel">
+        <h3>Gemini Insight</h3>
+        <textarea id="geminiPrompt" class="prompt-box" rows="3">Tell me what is in this image, then mention any terrain risks or notable objects.</textarea>
+        <div class="ai-row">
+          <button id="geminiBtn" class="btn">Analyze Image</button>
+          <span class="hint">Uses `GEMINI_API_KEY` on the backend.</span>
+        </div>
+        <div id="geminiOutput" class="ai-output">No Gemini response yet.</div>
+      </div>
+
+    </div>
+  </div>
+
+<script src="/static/script.js"></script>
+</body>
+</html>
