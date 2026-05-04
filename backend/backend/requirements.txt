@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-torch
-torchvision
-pillow
-numpy
-python-multipart
-segmentation-models-pytorch
-timm
