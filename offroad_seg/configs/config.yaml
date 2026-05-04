@@ -1,0 +1,90 @@
+# ============================================================
+#  Offroad Semantic Segmentation — Training Configuration
+# ============================================================
+
+# ---- Paths ----
+data:
+  train_rgb:   data/train/Color_Images
+  train_masks: data/train/Segmentation
+  val_rgb:     data/val/Color_Images
+  val_masks:   data/val/Segmentation
+  test_images: data/testImages
+
+# ---- Classes ----
+# Raw pixel values in mask images → model class indices 0..9
+classes:
+  num_classes: 10
+  id_map:
+    100:   0   # Trees
+    200:   1   # Lush Bushes
+    300:   2   # Dry Grass
+    500:   3   # Dry Bushes
+    550:   4   # Ground Clutter
+    600:   5   # Flowers
+    700:   6   # Logs
+    800:   7   # Rocks
+    7100:  8   # Landscape
+    10000: 9   # Sky
+  names:
+    - Trees
+    - Lush Bushes
+    - Dry Grass
+    - Dry Bushes
+    - Ground Clutter
+    - Flowers
+    - Logs
+    - Rocks
+    - Landscape
+    - Sky
+
+# ---- Model ----
+model:
+  architecture: DeepLabV3Plus
+  encoder: resnet34
+  encoder_weights: imagenet
+  in_channels: 3
+  activation: null
+
+# ---- Training ----
+train:
+  epochs: 20
+  batch_size: 4
+  image_size: [256, 256]        # [H, W] — resize all images to this
+  num_workers: 4
+  pin_memory: true
+  save_dir: runs/
+
+# ---- Optimizer ----
+optimizer:
+  name: AdamW
+  lr: 0.0003
+  weight_decay: 0.0001
+
+# ---- Scheduler ----
+scheduler:
+  name: CosineAnnealingLR
+  T_max: 20                    # should match epochs
+  eta_min: 0.000001
+
+# ---- Loss ----
+loss:
+  dice_weight: 0.5
+  ce_weight:   0.5
+  # class weights to handle imbalance (rare classes get higher weight)
+  class_weights: [1.5, 1.5, 1.2, 1.2, 2.0, 3.0, 3.0, 1.5, 0.5, 0.5]
+
+# ---- Augmentation ----
+augmentation:
+  use_aug: true
+  hflip_prob: 0.5
+  vflip_prob: 0.1
+  rotate_limit: 15
+  brightness_limit: 0.2
+  contrast_limit: 0.2
+  blur_prob: 0.1
+  grid_distortion_prob: 0.2
+
+# ---- Misc ----
+seed: 42
+device: cuda                    # cuda | cpu
+log_interval: 5                 # log every N epochs
