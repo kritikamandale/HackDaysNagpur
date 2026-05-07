@@ -1,7 +1,7 @@
 
 ---
 
-## 🚀 Offroad Autonomous Image segmentation 
+## 🚀 Offroad Autonomous Image segmentation Project
 
 A responsive, glassmorphic UI to visualize the segmentation model's capabilities and leverage Google's Gemini for contextual terrain insight.
 
