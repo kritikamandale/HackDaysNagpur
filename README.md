@@ -190,15 +190,6 @@ Key settings to tune:
 ```
 IoU per class = TP / (TP + FP + FN)
 Mean IoU      = average IoU across all classes present in dataset
-```
-
-Benchmarks:
-- < 0.30 → model not learning
-- 0.30–0.50 → baseline range
-- 0.50–0.70 → competitive
-- > 0.70 → strong result
-
----
 
 ## Tips to Improve IoU
 
