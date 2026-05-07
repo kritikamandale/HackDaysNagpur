@@ -1,7 +1,7 @@
 
 ---
 
-## 🚀 The Frontend Demo App (`demo_static`)
+## 🚀 Offroad Autonomous Image segmentation 
 
 A responsive, glassmorphic UI to visualize the segmentation model's capabilities and leverage Google's Gemini for contextual terrain insight.
 
