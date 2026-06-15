@@ -4,12 +4,15 @@ train.py — Main training script for Offroad Semantic Segmentation
 Usage:
     python train.py
     python train.py --config configs/config.yaml
+    python train.py --wandb                       # enable W&B logging
 
 What happens:
   1. Loads config and builds model, dataloaders, loss, optimizer
   2. Trains for N epochs — saves best checkpoint by val mIoU
   3. Logs loss + IoU every epoch
   4. Saves training curves at the end → runs/training_curves.png
+  5. (--wandb) Logs metrics, 5 sample predictions every 5 epochs,
+               and per-class IoU table at the end of training
 """
 import os
 import sys
@@ -21,16 +24,25 @@ import time
 import argparse
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from pathlib import Path
 
 # ── Local imports ─────────────────────────────────────────────────────
-from src.utils      import load_config, set_seed, save_checkpoint, plot_training_curves, print_iou_table
+from src.utils      import (load_config, set_seed, save_checkpoint,
+                             plot_training_curves, print_iou_table,
+                             CLASS_NAMES, mask_to_color)
 from src.dataset    import get_dataloaders
 from src.transforms import get_train_transforms, get_val_transforms
 from src.model      import build_model
 from src.losses     import build_loss
 from src.metrics    import IoUMeter
+
+# ── Optional W&B ──────────────────────────────────────────────────────
+try:
+    import wandb
+except ImportError:
+    wandb = None
 
 
 # ── Argument parsing ──────────────────────────────────────────────────
@@ -38,9 +50,50 @@ def parse_args():
     p = argparse.ArgumentParser(description="Train segmentation model")
     p.add_argument("--config", default="configs/config.yaml",
                    help="Path to config YAML")
-    p.add_argument("--resume",  default=None,
+    p.add_argument("--resume", default=None,
                    help="Path to checkpoint to resume from")
+    p.add_argument("--wandb", action="store_true",
+                   help="Enable Weights & Biases experiment tracking")
     return p.parse_args()
+
+
+# ── W&B sample image logger ───────────────────────────────────────────
+def log_val_samples_to_wandb(model, val_loader, device, n_samples=5):
+    """
+    Run inference on the first n_samples of the val set and log
+    side-by-side RGB | Ground Truth | Prediction panels to W&B.
+    """
+    # ImageNet de-normalization constants
+    mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+    std  = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+
+    model.eval()
+    collected = []
+
+    with torch.no_grad():
+        for images, masks in val_loader:
+            preds = model(images.to(device)).argmax(dim=1).cpu()
+            for i in range(images.size(0)):
+                if len(collected) >= n_samples:
+                    break
+                img_np  = (images[i].cpu() * std + mean).clamp(0, 1).permute(1, 2, 0).numpy()
+                gt_np   = masks[i].numpy()
+                pred_np = preds[i].numpy()
+                collected.append((img_np, gt_np, pred_np))
+            if len(collected) >= n_samples:
+                break
+
+    wandb_images = []
+    for idx, (img, gt, pred) in enumerate(collected):
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        axes[0].imshow(img);                 axes[0].set_title("RGB");          axes[0].axis("off")
+        axes[1].imshow(mask_to_color(gt));   axes[1].set_title("Ground Truth"); axes[1].axis("off")
+        axes[2].imshow(mask_to_color(pred)); axes[2].set_title("Prediction");   axes[2].axis("off")
+        plt.tight_layout()
+        wandb_images.append(wandb.Image(fig, caption=f"val_sample_{idx + 1}"))
+        plt.close(fig)
+
+    wandb.log({"val_predictions": wandb_images})
 
 
 # ── One training epoch ────────────────────────────────────────────────
@@ -115,6 +168,19 @@ def main():
 
     set_seed(cfg.get("seed", 42))
 
+    # ── W&B setup ─────────────────────────────────────────────────────
+    use_wandb = args.wandb and wandb is not None
+    if args.wandb and wandb is None:
+        print("  [WARN] --wandb flag set but wandb is not installed. "
+              "Install it with: pip install wandb")
+    if use_wandb:
+        wandb.init(
+            project="offroad-segmentation",
+            name=f"{cfg['model']['architecture']}_{cfg['model']['encoder']}",
+            config=cfg,
+        )
+        print(f"  W&B run initialized: {wandb.run.name}")
+
     # Device
     device_str = cfg.get("device", "cuda")
     device = torch.device(device_str if torch.cuda.is_available() else "cpu")
@@ -175,6 +241,8 @@ def main():
     save_dir  = cfg["train"]["save_dir"]
     log_every = cfg.get("log_interval", 5)
 
+    best_per_class_iou = None  # per-class IoU at the best epoch
+
     print(f"\n── Training for {n_epochs} epochs ──────────────────────────\n")
 
     for epoch in range(start_epoch, n_epochs):
@@ -189,7 +257,6 @@ def main():
         )
         scheduler.step()
 
-        # Log
         elapsed = time.time() - epoch_start
         lr_now  = optimizer.param_groups[0]["lr"]
 
@@ -203,20 +270,35 @@ def main():
               f"| train_mIoU={train_iou:.4f}  val_mIoU={val_iou:.4f} "
               f"| lr={lr_now:.6f}  ({elapsed:.1f}s)")
 
+        # ── W&B: per-epoch scalars ─────────────────────────────────────
+        if use_wandb:
+            wandb.log({
+                "epoch":         epoch + 1,
+                "train_loss":    train_loss,
+                "val_loss":      val_loss,
+                "val_mIoU":      val_iou,
+                "learning_rate": lr_now,
+            })
+
         # Detailed per-class table every log_every epochs
         if (epoch + 1) % log_every == 0:
             print_iou_table(per_class_iou, val_iou)
 
+        # ── W&B: sample prediction images every 5 epochs ──────────────
+        if use_wandb and (epoch + 1) % 5 == 0:
+            log_val_samples_to_wandb(model, val_loader, device, n_samples=5)
+
         # Save best checkpoint
         if val_iou > best_iou:
             best_iou = val_iou
+            best_per_class_iou = per_class_iou
             save_checkpoint(
                 state={
-                    "epoch":         epoch,
-                    "model_state":   model.state_dict(),
+                    "epoch":           epoch,
+                    "model_state":     model.state_dict(),
                     "optimizer_state": optimizer.state_dict(),
-                    "best_iou":      best_iou,
-                    "config":        cfg,
+                    "best_iou":        best_iou,
+                    "config":          cfg,
                 },
                 path=str(Path(save_dir) / "best_model.pth"),
             )
@@ -226,21 +308,31 @@ def main():
         if (epoch + 1) % 10 == 0:
             save_checkpoint(
                 state={
-                    "epoch":         epoch,
-                    "model_state":   model.state_dict(),
+                    "epoch":           epoch,
+                    "model_state":     model.state_dict(),
                     "optimizer_state": optimizer.state_dict(),
-                    "best_iou":      best_iou,
-                    "config":        cfg,
+                    "best_iou":        best_iou,
+                    "config":          cfg,
                 },
                 path=str(Path(save_dir) / f"checkpoint_epoch{epoch+1}.pth"),
             )
 
-    # Final summary
+    # ── Final summary ──────────────────────────────────────────────────
     print(f"\n  ✓ Training complete. Best val mIoU = {best_iou:.4f}")
     print(f"  Best model saved → {save_dir}/best_model.pth")
 
+    # ── W&B: per-class IoU table for the best epoch ───────────────────
+    if use_wandb and best_per_class_iou is not None:
+        table = wandb.Table(columns=["Class", "IoU"])
+        for name, iou_val in zip(CLASS_NAMES, best_per_class_iou):
+            table.add_data(name, round(iou_val, 4))
+        wandb.log({"per_class_iou_best_epoch": table})
+
     # Plot and save training curves
     plot_training_curves(history, save_path=str(Path(save_dir) / "training_curves.png"))
+
+    if use_wandb:
+        wandb.finish()
 
     print("\n  Next step → python test.py")
 

@@ -1,6 +1,12 @@
 # Offroad Semantic Scene Segmentation
 ### Duality AI Hackathon — Nagpur
 
+[![W&B](https://img.shields.io/badge/Weights_&_Biases-FFCC33?style=for-the-badge&logo=WeightsAndBiases&logoColor=black)](https://wandb.ai/your-username/offroad-segmentation)
+[![Python 3.10](https://img.shields.io/badge/Python-3.10-blue?logo=python)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0-EE4C2C?logo=pytorch)](https://pytorch.org/)
+
+> Replace `your-username` in the W&B badge URL with your actual W&B username after running with `--wandb`.
+
 ---
 
 ## Project Structure
@@ -122,6 +128,91 @@ Produces:
 
 ---
 
+### Train with W&B experiment tracking
+```bash
+python train.py --wandb
+```
+Logs per-epoch loss, mIoU, learning rate, and 5 sample prediction panels every 5 epochs.
+Per-class IoU table is logged as a W&B Table at the end of training.
+
+---
+
+### Run architecture ablation study
+```bash
+python ablation.py            # uses epoch count from config
+python ablation.py --epochs 10 --wandb
+```
+Trains DeepLabV3Plus, UNet, FPN, and SegFormer sequentially and produces:
+- `ablation_results.csv`      — ranked results table
+- `ablation_comparison.png`   — bar chart of val mIoU by architecture
+
+---
+
+## Architecture Comparison Results
+
+Results from `python ablation.py` (placeholder values — replace after running):
+
+| Architecture | Encoder | mIoU | Params (M) | Inference (ms) |
+|---|---|---|---|---|
+| DeepLabV3Plus | resnet34 | 0.XXXX | XX.X | XX.X |
+| UNet | resnet34 | 0.XXXX | XX.X | XX.X |
+| FPN | efficientnet-b2 | 0.XXXX | XX.X | XX.X |
+| SegFormer | mit_b2 | 0.XXXX | XX.X | XX.X |
+
+Update this table by running `python ablation.py` and copying values from `ablation_results.csv`.
+
+---
+
+## Deployment
+
+### Export to ONNX
+```bash
+python export_onnx.py
+python export_onnx.py --checkpoint runs/best_model.pth --output best_model.onnx --n_runs 200
+```
+
+Outputs:
+- `best_model.onnx` — optimized ONNX model with dynamic batch size (opset 17)
+- Benchmark summary comparing PyTorch vs ONNX latency (mean ± std over 100 runs)
+- Numerical parity check (max absolute difference between PyTorch and ONNX outputs)
+
+The ONNX model can be served with ONNX Runtime, TensorRT, or any ONNX-compatible runtime:
+```python
+import onnxruntime as ort
+import numpy as np
+
+sess = ort.InferenceSession("best_model.onnx")
+dummy = np.random.randn(1, 3, 256, 256).astype(np.float32)
+output = sess.run(None, {"input": dummy})[0]  # shape: (1, 10, 256, 256)
+pred_mask = output.argmax(axis=1)              # shape: (1, 256, 256)
+```
+
+---
+
+## Explainability
+
+### GradCAM heatmaps per terrain class
+```bash
+python explain.py
+python explain.py --min_pct 0.03 --n_samples 3
+```
+
+Generates GradCAM attention maps (using `pytorch-grad-cam`) to show where the model
+"looks" for each terrain class. Target layer: last convolutional block of the encoder.
+
+For each of the 10 classes, saves a grid of `[RGB | GradCAM Overlay | GT Mask]`
+for up to 3 validation images where that class is present in the ground truth.
+
+Outputs:
+- `outputs/gradcam/class_Trees.png`
+- `outputs/gradcam/class_Lush_Bushes.png`
+- ... (one file per class)
+
+Also prints a **focus analysis** — whether the model attends to the correct spatial
+regions for each class (focus score = mean activation on-class / mean activation off-class).
+
+---
+
 ## Configuration
 
 All hyperparameters are in `configs/config.yaml`.
@@ -196,3 +287,6 @@ See `requirements.txt`. Key packages:
 - `segmentation-models-pytorch >= 0.3.3`
 - `albumentations >= 1.3.1`
 - `torchmetrics >= 1.0.0`
+- `wandb >= 0.16.0` — experiment tracking (optional, `--wandb` flag)
+- `onnx >= 1.14.0` + `onnxruntime >= 1.16.0` — ONNX export and inference
+- `grad-cam >= 1.4.8` — GradCAM explainability (`pip install grad-cam`)

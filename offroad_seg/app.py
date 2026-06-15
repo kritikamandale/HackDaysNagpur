@@ -8,28 +8,37 @@ from src.transforms import get_val_transforms
 import traceback
 
 # Load configuration and model with error handling
+_model_error = None
 try:
     print("Loading configuration...")
     cfg       = load_config("configs/config.yaml")
-    print(f"Config loaded: {cfg}")
-    
     print("Setting device to CPU...")
     device    = torch.device("cpu")
-    
     print("Loading model from runs/best_model.pth...")
     model     = load_model_for_inference("runs/best_model.pth", cfg, "cpu")
     print("Model loaded successfully!")
-    
-    print("Loading transforms...")
     transform = get_val_transforms(cfg["train"]["image_size"])
     print("Transforms loaded!")
-    
+except FileNotFoundError:
+    _model_error = (
+        "No trained model found at <code>runs/best_model.pth</code>.<br>"
+        "Run <code>python train.py</code> first, then restart the app."
+    )
+    model = None
+    transform = None
+    cfg = load_config("configs/config.yaml")
+    print(f"[WARN] Model checkpoint missing — UI will show placeholder.")
 except Exception as e:
-    print(f"ERROR during initialization: {str(e)}")
-    traceback.print_exc()
-    raise
+    _model_error = f"Model failed to load: {e}"
+    model = None
+    transform = None
+    cfg = load_config("configs/config.yaml")
+    print(f"[WARN] {_model_error}")
 
 def segment_image(input_image):
+    if _model_error:
+        msg = f"<p style='color:#c0392b;text-align:center;padding:20px;'>{_model_error}</p>"
+        return None, None, msg
     if input_image is None:
         return None, None, "<p style='color:#999;text-align:center;'>Upload a desert image to begin terrain analysis.</p>"
 
