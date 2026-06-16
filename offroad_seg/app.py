@@ -144,7 +144,10 @@ def segment_image(input_image):
         "terrain":    {CLASS_NAMES[i]: round(100.0*c/total, 1)
                        for i, c in zip(unique, counts)},
     }
-    return color_mask, overlay, trav_over, stats_html, trav_html, state
+    
+    pdf_path = generate_pdf(state)
+    
+    return color_mask, overlay, trav_over, stats_html, trav_html, gr.DownloadButton(value=pdf_path, interactive=True)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -226,16 +229,16 @@ def generate_pdf(state):
     if state is None:
         return None
 
-    fig = plt.figure(figsize=(16, 22), facecolor="#0d1117")
+    fig = plt.figure(figsize=(16, 22), facecolor="white")
     fig.suptitle("Offroad Terrain Analysis Report",
-                 fontsize=22, fontweight="bold", color="white", y=0.98)
+                 fontsize=22, fontweight="bold", color="black", y=0.98)
 
     gs = gridspec.GridSpec(4, 3, figure=fig, hspace=0.45, wspace=0.3,
                            top=0.95, bottom=0.04, left=0.06, right=0.97)
 
     def _show_img(ax, img, title):
         ax.imshow(img)
-        ax.set_title(title, color="white", fontsize=11, pad=6)
+        ax.set_title(title, color="black", fontsize=11, pad=6)
         ax.axis("off")
         for spine in ax.spines.values():
             spine.set_visible(False)
@@ -249,21 +252,21 @@ def generate_pdf(state):
     _show_img(fig.add_subplot(gs[1, 0]), state["trav_over"], "Traversability Map")
 
     ax_score = fig.add_subplot(gs[1, 1])
-    ax_score.set_facecolor("#161b22")
+    ax_score.set_facecolor("#f8f9fa")
     score = state["safety"]
     sc    = "#22c55e" if score >= 70 else "#eab308" if score >= 40 else "#ef4444"
     lbl   = "SAFE"    if score >= 70 else "CAUTION"  if score >= 40 else "DANGER"
     ax_score.text(0.5, 0.55, str(score),  fontsize=68, ha="center", va="center",
                   color=sc, fontweight="bold", transform=ax_score.transAxes)
     ax_score.text(0.5, 0.22, "Safety Score / 100", fontsize=12, ha="center",
-                  color="white", transform=ax_score.transAxes)
+                  color="black", transform=ax_score.transAxes)
     ax_score.text(0.5, 0.10, lbl, fontsize=16, ha="center",
                   color=sc, fontweight="bold", transform=ax_score.transAxes)
-    ax_score.set_title("Safety Score", color="white", fontsize=11, pad=6)
+    ax_score.set_title("Safety Score", color="black", fontsize=11, pad=6)
     ax_score.axis("off")
 
     ax_pie = fig.add_subplot(gs[1, 2])
-    ax_pie.set_facecolor("#161b22")
+    ax_pie.set_facecolor("#f8f9fa")
     bd = state["breakdown"]
     slices = [(k, v) for k, v in bd.items() if v > 0]
     pie_colors = {"safe": "#22c55e", "caution": "#eab308", "danger": "#ef4444"}
@@ -272,35 +275,35 @@ def generate_pdf(state):
         labels=[s[0].capitalize() for s in slices],
         colors=[pie_colors[s[0]] for s in slices],
         autopct="%1.1f%%",
-        textprops={"color": "white", "fontsize": 10},
+        textprops={"color": "black", "fontsize": 10},
         startangle=90,
     )
-    ax_pie.set_title("Risk Distribution", color="white", fontsize=11, pad=6)
-    ax_pie.set_facecolor("#161b22")
+    ax_pie.set_title("Risk Distribution", color="black", fontsize=11, pad=6)
+    ax_pie.set_facecolor("#f8f9fa")
 
     # Row 2 — terrain bar chart (full width)
     ax_bar = fig.add_subplot(gs[2, :])
-    ax_bar.set_facecolor("#161b22")
+    ax_bar.set_facecolor("#f8f9fa")
     terrain = dict(sorted(state["terrain"].items(), key=lambda x: x[1]))
     bar_colors = ["#{:02x}{:02x}{:02x}".format(*CLASS_COLORS[CLASS_NAMES.index(n)])
                   for n in terrain]
     bars = ax_bar.barh(list(terrain.keys()), list(terrain.values()),
                        color=bar_colors, edgecolor="none", height=0.6)
-    ax_bar.set_facecolor("#161b22")
-    ax_bar.set_xlabel("Coverage (%)", color="white", fontsize=10)
-    ax_bar.set_title("Terrain Class Distribution", color="white", fontsize=11, pad=6)
-    ax_bar.tick_params(colors="white")
+    ax_bar.set_facecolor("#f8f9fa")
+    ax_bar.set_xlabel("Coverage (%)", color="black", fontsize=10)
+    ax_bar.set_title("Terrain Class Distribution", color="black", fontsize=11, pad=6)
+    ax_bar.tick_params(colors="black")
     ax_bar.spines["top"].set_visible(False)
     ax_bar.spines["right"].set_visible(False)
     for spine in ["bottom", "left"]:
-        ax_bar.spines[spine].set_color("#333")
+        ax_bar.spines[spine].set_color("#ccc")
     for bar, val in zip(bars, terrain.values()):
         ax_bar.text(val + 0.3, bar.get_y() + bar.get_height() / 2,
-                    f"{val:.1f}%", va="center", color="white", fontsize=9)
+                    f"{val:.1f}%", va="center", color="black", fontsize=9)
 
     # Row 3 — text summary
     ax_txt = fig.add_subplot(gs[3, :])
-    ax_txt.set_facecolor("#161b22")
+    ax_txt.set_facecolor("#f8f9fa")
     ax_txt.axis("off")
     dominant = max(state["terrain"], key=state["terrain"].get)
     rec = ("Terrain is suitable for vehicle navigation."
@@ -318,15 +321,14 @@ def generate_pdf(state):
         f"  Generated by Offroad Terrain Segmentation AI  ·  DeepLabV3+ + ResNet-34  ·  mIoU 58.4%"
     )
     ax_txt.text(0.01, 0.95, summary, transform=ax_txt.transAxes, fontsize=10.5,
-                color="#e2e8f0", va="top", fontfamily="monospace",
-                bbox=dict(boxstyle="round,pad=0.8", facecolor="#0d1117",
-                          edgecolor="#333", linewidth=1))
-    ax_txt.set_title("Summary", color="white", fontsize=11, pad=6)
+                color="black", va="top", fontfamily="monospace",
+                bbox=dict(boxstyle="round,pad=0.8", facecolor="white",
+                          edgecolor="#ccc", linewidth=1))
+    ax_txt.set_title("Summary", color="black", fontsize=11, pad=6)
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-    pdf_path = tmp.name
-    tmp.close()
-    plt.savefig(pdf_path, format="pdf", facecolor="#0d1117",
+    tmp_dir = tempfile.mkdtemp()
+    pdf_path = os.path.join(tmp_dir, "Offroad_Terrain_Report.pdf")
+    plt.savefig(pdf_path, format="pdf", facecolor="white",
                 bbox_inches="tight", dpi=120)
     plt.close(fig)
     return pdf_path
@@ -518,8 +520,6 @@ footer { display: none !important; }
 # ══════════════════════════════════════════════════════════════════════
 with gr.Blocks(title="Offroad Terrain Segmentation") as demo:
 
-    results_state = gr.State(value=None)
-
     # ── Header ──────────────────────────────────────────────────────
     gr.HTML("""
     <div class='app-header'>
@@ -593,10 +593,8 @@ with gr.Blocks(title="Offroad Terrain Segmentation") as demo:
             # Row C: PDF download
             with gr.Row():
                 with gr.Column(scale=1):
-                    pdf_btn = gr.Button("Download PDF Report", elem_classes="pdf-btn")
-                with gr.Column(scale=1):
-                    pdf_file = gr.File(label="PDF Report", interactive=False)
-                with gr.Column(scale=2):
+                    pdf_btn = gr.DownloadButton("Download PDF Report", elem_classes="pdf-btn", interactive=False)
+                with gr.Column(scale=3):
                     pass   # spacer
 
             gr.HTML("<div style='margin:16px 0'></div>")
@@ -610,12 +608,7 @@ with gr.Blocks(title="Offroad Terrain Segmentation") as demo:
                 fn=segment_image,
                 inputs=input_img,
                 outputs=[pred_img, overlay_img, trav_img,
-                         stats_html, trav_html, results_state],
-            )
-            pdf_btn.click(
-                fn=generate_pdf,
-                inputs=results_state,
-                outputs=pdf_file,
+                         stats_html, trav_html, pdf_btn],
             )
 
         # ── Tab 2: Video Analysis ────────────────────────────────────
