@@ -1,8 +1,12 @@
 # Ignore dataset
 offroad_seg/data/
+Offroad_Segmentation_Training_Dataset/
 
 # (optional)
 data/
+
+# Hugging Face Space clone (separate git repo, deployed independently)
+offroad_seg/offroad-terrain-segmentation/
 
 # Ignore large files
 *.zip
