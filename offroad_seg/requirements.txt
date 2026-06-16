@@ -2,7 +2,8 @@ wandb>=0.16.0
 onnx>=1.14.0
 onnxruntime>=1.16.0
 grad-cam>=1.4.8
-fastapi>=0.104.0
+fastapi==0.112.2
+starlette==0.37.2
 uvicorn>=0.24.0
 python-multipart>=0.0.6
 torch>=2.0.0
